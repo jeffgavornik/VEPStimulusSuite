@@ -1,0 +1,27 @@
+
+Execute the following steps to configure a new system to use the StimulusSuite.  Assumes that Psychtoolbox is already installed, that the mex command has been configured, and that the computer in use is running MacOS or Linux.  
+
+Also assumes that a USB1208FS Plus is being used as the TTL/DAQ hardware interface.  Compiled versions of the interface code for this device should be included with the package, but may require additional packages be installed.  See README and Makefile in the USB1208FSPlus director for more details.
+
+1. on Mac or Linux, execute 'make' and 'make install' from the StimulusSuite directory using the command prompt (that can be done from in Matlab as >> !make;make install).  This will compile anything that needs to be compiled and copy all files to /usr/local/MATLAB/Shared/StimulusSuite.  Add this directory and all subdirectories to your path
+
+2. Create a hardware interface for TTL event words as follows (make sure the USB1208FS Plus is plugged in before starting).  Note: these commands will create preference files in ~/.matlab/StimulusSuitePrefs
+>> ttl = ttlInterfaceClass; % note: ignore warning
+>> ttl.ttlHWClass = usb1208FSPlusClass;
+>> delete(ttl);
+The following is optional, but useful if you want to use the autocalibrate routine for the stimulus monitor
+>> daq = daqInterfaceClass; % note: ignore warning
+>> daq.daqHWClass = usb1208FSPlusClass;
+>> delete(daq);
+This is even more optional, but will configure the Analog Input to differential mode.
+>> 
+
+3. Calibrate the monitor that will be used for presenting visual stimuli.  Make sure that you save both gamma correction and monitor properties.  Doing so will create preference files in ~/.matlab/StimulusSuitePrefs that will be used for subsequent stimulus sessions.
+>> sio = screenInterfaceClass.returnInterface;
+>> sio.calibrateMonitor
+>> sio.closeWindow;
+
+4. Bring up the Stimulus Control GUI by executing the following command.  There should be no errors or warnings (except  about expertimental records logging, but this can be fixed through the GUI)
+>> ScrnCtrlApp;
+
+Note: this is a Beta release.  Some core functions are still in flux.  JG, 4/4/16.

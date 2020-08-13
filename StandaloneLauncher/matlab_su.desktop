@@ -1,0 +1,8 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Type=Application
+Icon=/usr/share/icons/matlabSU.png
+Name=MATLAB-SU
+Comment=Start MATLAB - The Language of Technical Computing
+Exec=gksudo "matlab -desktop"
+Categories=Development;

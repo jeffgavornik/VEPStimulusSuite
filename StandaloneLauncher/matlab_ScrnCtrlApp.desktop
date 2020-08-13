@@ -1,0 +1,8 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Type=Application
+Icon=/usr/share/icons/ratHead.png
+Name=Visual Stimulus Application
+Comment=Launch ScrnCtrlApp as a standalone application in matlab
+Exec=matlab -desktop -r StandaloneScrnCtrlApp
+Categories=Development;

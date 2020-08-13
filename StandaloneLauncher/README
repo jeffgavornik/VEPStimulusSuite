@@ -1,0 +1,5 @@
+This directory contains files to create a launcher for the standalone stimulus application.  To install:
+
+>> sudo make
+
+Make will copy the launcher files to /usr/share/applications and icon file to /usr/share/icons

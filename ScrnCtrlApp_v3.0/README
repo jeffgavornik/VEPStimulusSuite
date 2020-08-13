@@ -1,0 +1,3 @@
+Matlab screen control application with supporting functions and classes.  
+Make will create a tarball, make install will put everything in the deployment
+directory.

@@ -1,0 +1,6 @@
+Mex wrapper functions to interface with the USB-1208FS-Plus.  MAKEFILE will
+compile and install the files.  Requires libusb-1.0.  Also requires 
+Matlab installation with mex in the callers path.  Run "make install" as su to 
+deploy to a shared directory (/usr/local/MATLAB/Shared/usb1208FSPlusInterface)
+
+JG 9/20/2013
