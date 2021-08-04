@@ -22,7 +22,7 @@ classdef ttlHardwareAbstractClass < handle
     end
     
     properties
-        TTLMetaDataEnabled
+        TTLMetaDataEnabled = false;
     end
     
     methods (Abstract)
@@ -50,9 +50,9 @@ classdef ttlHardwareAbstractClass < handle
     methods
         
         function value = get.TTLMetaDataEnabled(obj)
-            if isempty(obj.TTLMetaDataEnabled)
-                obj.TTLMetaDataEnabled = true;
-            end
+            %if isempty(obj.TTLMetaDataEnabled)
+            %    obj.TTLMetaDataEnabled = true;
+            %end
             value = obj.TTLMetaDataEnabled;
         end
         

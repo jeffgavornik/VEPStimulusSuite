@@ -2,7 +2,6 @@
 
 /*
 
-
     When inPin goes from low to high, start pulsing on outPin with a pulseHalfPeriod.
     Keep pulsing for burstDuration and abort if inPin goes low to high
 
@@ -27,6 +26,10 @@
 #define BUFFERSIZE 52 // all commands will be this many bytes
 #define BAUDRATE 115200 // must match matlab value
 
+#define ABORTCMD "ABORT"
+#define TRIGGERCMD "TRIGGER"
+#define VALIDATECMD "VALIDATE"
+
 // Hardware Assignments
 const int inPin = 8;
 const int outPin = 9;
@@ -35,10 +38,13 @@ const int burstActivePin = LED_BUILTIN; // built in LED will show pulses
 unsigned long currTime, burstEndTime, laserToggleTime;
 int burstDuration = 3000; // ms
 float pulseFreq = 30; // Hz
-unsigned int pulseHalfPeriod; // ms, one on-off cycle occurs every 2 pulseHalfPeriods
+unsigned long pulseHalfPeriod; // ms, one on-off cycle occurs every 2 pulseHalfPeriods
 int laserState = LOW;
 int pulseActive = LOW;
+
 bool abortFlag = false;
+bool serialTrigger = false;
+bool startBurst = false;
 
 // Variables to set minimum interval before trigger pulses
 unsigned long readyForTriggerTime;
@@ -73,7 +79,6 @@ void setup() {
   // Init the LCD
   lcd.init();
   lcd.backlight();
-  lcd.clear();
   outputStateToLCD();
 
   // Activate the Serial interface
@@ -84,6 +89,7 @@ void setup() {
 
 void outputStateToLCD() {
   // Show current parameters
+  lcd.clear();
   lcd.home();
   lcd.print("Burst = ");
   lcd.print(burstDuration);
@@ -101,19 +107,21 @@ void loop() {
 
   // Look for trigger pulses on inPin
   inPinToggled = false;
-  if (currTime >= readyForTriggerTime) {
+  if (currTime >= readyForTriggerTime || serialTrigger) {
     inPinState = digitalRead(inPin);
     if (inPinState != prevInPinState) { // toggle occured
       inPinToggled = true;
       prevInPinState = inPinState;
       readyForTriggerTime = currTime + debounceWindow;
+      if (inPinToggled && inPinState == HIGH) startBurst = true;
     }
   }
+  startBurst = (inPinToggled && inPinState == HIGH) || serialTrigger;
 
   // Determine when to start/stop pulse and when to turn the laser on and off
   switch (programState) {
     case WAITING:
-      if (inPinToggled && inPinState == HIGH) {
+      if (startBurst) {
         programState = PULSING;
         burstEndTime = currTime + burstDuration;
         laserToggleTime = currTime + pulseHalfPeriod;
@@ -123,7 +131,7 @@ void loop() {
       }
       break;
     case PULSING:
-      if ((inPinToggled && inPinState == HIGH) || (currTime >= burstEndTime) || abortFlag) {
+      if ((inPinToggled && inPinState == HIGH) || (currTime > burstEndTime) || abortFlag) {
         laserState = LOW;
         pulseActive = LOW;
         programState = WAITING;
@@ -141,17 +149,25 @@ void loop() {
 
   // Process any command received over the serial interface
   abortFlag = false;
+  serialTrigger = false;
   if (Serial.available() >= BUFFERSIZE) {
     String commandStr = Serial.readStringUntil(NEWLINE);
     while (Serial.available()) Serial.read(); // flush buffer
     // Look for ABORT or VALIDATE commands
-    if (commandStr == "ABORT") abortFlag = true;
-    else if (commandStr == "VALIDATE") Serial.println("VALID");
+    if (commandStr == ABORTCMD) abortFlag = true;
+    else if (commandStr == VALIDATECMD) Serial.println("VALID");
+    else if (commandStr == TRIGGERCMD) serialTrigger = true;
     else { // Assign variables based on string content
       int intBurst, intFreq;
       sscanf(commandStr.c_str(), "%d:%d", &intBurst, &intFreq);
       if (intBurst > 0) burstDuration = intBurst;
-      if (intFreq > 0) pulseFreq = (float)intFreq;
+      if (intFreq > 0) {
+        pulseFreq = (float)intFreq;
+        pulseHalfPeriod = 500 / pulseFreq;
+      } else if (intFreq == 0) {
+        pulseFreq = 0.0;
+        pulseHalfPeriod = 4294967295;
+      }
       outputStateToLCD();
     }
   }

@@ -526,11 +526,13 @@ classdef screenInterfaceClass < singletonClass & storedPreferenceClass
                 PsychImaging('PrepareConfiguration');
                 PsychImaging('AddTask', 'General', ...
                     'FloatingPoint32BitIfPossible');
+                %PsychImaging('FinalizeConfiguration');
                 obj.window = PsychImaging('OpenWindow', ...
                     obj.monProfile.number, obj.monProfile.gray,rect);
-            catch
-                obj.window = Screen('OpenWindow',...
-                    obj.monProfile.number,obj.monProfile.gray,rect);
+            catch ME
+                handleError(ME,true,'Psychimaging Problem, try again');
+                %obj.window = Screen('OpenWindow',...
+                %    obj.monProfile.number,obj.monProfile.gray,rect);
             end
             Screen('Flip',obj.window);
             obj.getMaxPriorityForSystem();

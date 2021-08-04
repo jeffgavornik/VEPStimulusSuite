@@ -7,6 +7,15 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
     properties (Constant,Hidden=true)
         prefFileNameStr = 'adruinoSerialPulseGenerator';
         configWarningID = 'adruinoSerialPulseGenerator:CONFIG';
+        triggerCmd = 'TRIGGER';
+        validateCmd = 'VALIDATE';
+        abortCmd = 'ABORT';
+    end
+    
+    properties
+        burstDuration
+        pulseFreq
+        minInterCmdTime = 0.005;
     end
     
     properties (SetObservable,AbortSet)
@@ -23,9 +32,12 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
         serialPort % the usb-connected Arduino
     end
     
-    properties (SetAccess=private,Hidden=true)
+    properties (Access=private)
         
+        lastWriteCmdTime = 0;
+        evntTime
     end
+    
     
     methods
         
@@ -38,7 +50,7 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
             end
         end
         
-        function openConnection(obj,reconnectFlag)
+        function success = openConnection(obj,reconnectFlag)
             % use current obj settings to connect to the arduino
             if nargin < 2
                 reconnectFlag = false;
@@ -52,8 +64,8 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
                 end
                 obj.serialPort = serialport(obj.SerialPortNameStr,obj.BAUDRATE);
                 %configureCallback(obj.serialPort,"byte",52,@(src,evnt)respondToData(obj));
-                configureCallback(obj.serialPort,"terminator",@(src,evnt)respondToData(obj));
-                tic
+                configureCallback(obj.serialPort,...
+                    "terminator",@(src,evnt)respondToData(obj));
                 success = true;
             catch ME
                 handleError(ME,true,'Arduino Connection Error');
@@ -68,7 +80,7 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
             end
             try
                 configureCallback(obj.serialPort,"off");
-                obj.sendString('VALIDATE');
+                obj.sendString(obj.validateCmd);
                 response = char(readline(obj.serialPort));
                 isValid = strcmp(response(1:end-1),'VALID');
                 configureCallback(obj.serialPort,"terminator",...
@@ -78,25 +90,41 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
             end
         end
         
-        %         function success = turnLightOff(obj)
-        %             success = true;
-        %             try
-        %                 obj.sendString('ABORT');
-        %             catch
-        %                 success = false;
-        %             end
-        %
-        %
-        %         end
-        
         function closeConnection(obj)
             delete(obj.serialPort);
             obj.serialPort = [];
         end
         
         function respondToData(obj,varargin)
-            dataStr = readline(obj.serialPort);
-            disp(dataStr);
+%             dataStr = readline(obj.serialPort);
+%             switch dataStr.strip
+%                 case 'BurstStarting'
+%                     fprintf('Burst Start\n');
+%                     obj.evntTime = GetSecs;
+%                 case {'BurstComplete','BurstAborted'}
+%                     duration = GetSecs-obj.evntTime;
+%                     fprintf('Burst Complete, duration = %1.3f sec\n',duration);
+%                 otherwise
+%                     fprintf('Serial Data Received:%s\n',dataStr);
+%             end
+        end
+        
+        function set.burstDuration(obj,value)
+            obj.burstDuration = value;
+            obj.sendString(sprintf('%i:-1',value));
+        end
+        
+        function set.pulseFreq(obj,value)
+            obj.pulseFreq = value;
+            obj.sendString(sprintf('-1:%i',value));
+        end
+        
+        function triggerPulse(obj)
+            obj.sendString(obj.triggerCmd);
+        end
+        
+        function abortPulse(obj)
+            obj.sendString(obj.abortCmd);
         end
         
         function findArduino(obj,forceflag)
@@ -116,6 +144,14 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
         end
         
         function sendString(obj,string)
+            % Make sure commands don't get sent too fast - this can cause
+            % problems with the code that parses command strings
+            currTime = GetSecs;
+            while (currTime-obj.lastWriteCmdTime<obj.minInterCmdTime)
+                currTime = GetSecs;
+            end
+            obj.lastWriteCmdTime = currTime;
+            % Create and fill buffer then send
             nCh = length(string);
             if nCh >= obj.BUFFERSIZE
                 error('String too long for serial buffer');
@@ -124,11 +160,9 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
             buff(1:nCh) = string;
             buff(nCh+1) = obj.NEWLINE;
             obj.serialPort.write(buff,"char");
+            % fprintf('SendStr:<%s>\n',buff);
         end
         
-        %         function isValid = validateInterface(obj)
-        %             isValid = false;
-        %         end
         
     end
     

@@ -73,7 +73,14 @@ classdef optoStimUSB1208FSPlusHWInterface < singletonClass ...
             status = obj.setLightLevel(1);
         end
         
+        function status = pulseLight(obj)
+            obj.setLightLevel(1);
+            obj.setLightLevel(0);
+            status = 0;
+        end
+        
         function status = turnLightOff(obj)
+            obj.stopPulseTrain;
             status = obj.setLightLevel(0);
         end
         
@@ -110,13 +117,16 @@ classdef optoStimUSB1208FSPlusHWInterface < singletonClass ...
         end
         
         function stopPulseTrain(obj)
-            [~,~,~,~,isComplete] = getThreadInfo(obj.pThreadInfo,0);
-            if ~isComplete
-                cancelThread(obj.pThread);
-                getThreadInfo(obj.pThreadInfo,1); % release memory
+            if ~isempty(obj.pThreadInfo)
+                [~,~,~,~,isComplete] = getThreadInfo(obj.pThreadInfo,0);
+                if ~isComplete
+                    cancelThread(obj.pThread);
+                    getThreadInfo(obj.pThreadInfo,1); % release memory
+                end
+                obj.pThread = [];
+                obj.pThreadInfo = [];
             end
-            obj.pThread = [];
-            obj.pThreadInfo = [];
+            
         end
         
         % Property setters
