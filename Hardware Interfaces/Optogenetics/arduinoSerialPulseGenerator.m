@@ -15,7 +15,7 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
     properties
         burstDuration
         pulseFreq
-        minInterCmdTime = 0.005;
+        minInterCmdTime = 0.010;
     end
     
     properties (SetObservable,AbortSet)
@@ -85,6 +85,10 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
                 isValid = strcmp(response(1:end-1),'VALID');
                 configureCallback(obj.serialPort,"terminator",...
                     @(src,evnt)respondToData(obj));
+                if ~isValid
+                    fprintf('Failed validation String:%s\n',...
+                        response(1:end-1));
+                end
             catch ME
                 handleError(ME,true,'Validation Error');
             end
@@ -96,7 +100,7 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
         end
         
         function respondToData(obj,varargin)
-%             dataStr = readline(obj.serialPort);
+             dataStr = readline(obj.serialPort); %#ok<NASGU>
 %             switch dataStr.strip
 %                 case 'BurstStarting'
 %                     fprintf('Burst Start\n');
@@ -160,7 +164,7 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
             buff(1:nCh) = string;
             buff(nCh+1) = obj.NEWLINE;
             obj.serialPort.write(buff,"char");
-            % fprintf('SendStr:<%s>\n',buff);
+            %fprintf('SendStr:<%s>\n',buff);
         end
         
         

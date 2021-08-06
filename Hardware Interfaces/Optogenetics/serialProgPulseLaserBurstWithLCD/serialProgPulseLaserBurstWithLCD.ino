@@ -8,6 +8,8 @@
     Serial connection can be used to set burstDuration and pulseFreq
     String should look like this 'burstDuration:pulseFreq', where both are integers.  Values of 0 are ignored.
 
+    See https://forum.arduino.cc/t/serial-input-basics/278284/2
+
     IC2 controlled LCD (I2C 16x2) shows current set points
 
     A4 connects to SDA
@@ -30,13 +32,15 @@
 #define TRIGGERCMD "TRIGGER"
 #define VALIDATECMD "VALIDATE"
 
+#define MAXDURATION 4294967290 // for unsigned long
+
 // Hardware Assignments
 const int inPin = 8;
 const int outPin = 9;
 const int burstActivePin = LED_BUILTIN; // built in LED will show pulses
 
 unsigned long currTime, burstEndTime, laserToggleTime;
-int burstDuration = 3000; // ms
+unsigned long burstDuration = 3000; // ms
 float pulseFreq = 30; // Hz
 unsigned long pulseHalfPeriod; // ms, one on-off cycle occurs every 2 pulseHalfPeriods
 int laserState = LOW;
@@ -79,6 +83,7 @@ void setup() {
   // Init the LCD
   lcd.init();
   lcd.backlight();
+  lcd.clear();
   outputStateToLCD();
 
   // Activate the Serial interface
@@ -89,15 +94,18 @@ void setup() {
 
 void outputStateToLCD() {
   // Show current parameters
-  lcd.clear();
   lcd.home();
   lcd.print("Burst = ");
-  lcd.print(burstDuration);
-  lcd.print(" ms ");
+  if (burstDuration < MAXDURATION) {
+    lcd.print(burstDuration);
+    lcd.print(" ms     ");
+  } else {
+    lcd.print(" inf    ");
+  }
   lcd.setCursor(0, 1);
   lcd.print("Freq = ");
   lcd.print(pulseFreq, 1);
-  lcd.print(" Hz");
+  lcd.print(" Hz    ");
 }
 
 
@@ -159,16 +167,25 @@ void loop() {
     else if (commandStr == TRIGGERCMD) serialTrigger = true;
     else { // Assign variables based on string content
       int intBurst, intFreq;
+      bool needRefresh = false;
       sscanf(commandStr.c_str(), "%d:%d", &intBurst, &intFreq);
-      if (intBurst > 0) burstDuration = intBurst;
-      if (intFreq > 0) {
+      if ((intBurst > 0) && (burstDuration != intBurst)) {
+        burstDuration = intBurst;
+        needRefresh = true;
+      } else if ((intBurst == 0) && (burstDuration != MAXDURATION)) {
+        needRefresh = true;
+        burstDuration = MAXDURATION;
+      }
+      if ((intFreq > 0) && (pulseFreq != (float)intFreq)) {
+        needRefresh = true;
         pulseFreq = (float)intFreq;
         pulseHalfPeriod = 500 / pulseFreq;
-      } else if (intFreq == 0) {
+      } else if ((intFreq == 0) && (pulseFreq != 0.0)) {
+        needRefresh = true;
         pulseFreq = 0.0;
-        pulseHalfPeriod = 4294967295;
+        pulseHalfPeriod = MAXDURATION;
       }
-      outputStateToLCD();
+      if (needRefresh) outputStateToLCD();
     }
   }
 }
