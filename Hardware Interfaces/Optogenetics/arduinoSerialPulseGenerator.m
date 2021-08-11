@@ -100,27 +100,29 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
         end
         
         function respondToData(obj,varargin)
-             dataStr = readline(obj.serialPort); %#ok<NASGU>
-%             switch dataStr.strip
-%                 case 'BurstStarting'
-%                     fprintf('Burst Start\n');
-%                     obj.evntTime = GetSecs;
-%                 case {'BurstComplete','BurstAborted'}
-%                     duration = GetSecs-obj.evntTime;
-%                     fprintf('Burst Complete, duration = %1.3f sec\n',duration);
-%                 otherwise
-%                     fprintf('Serial Data Received:%s\n',dataStr);
-%             end
+            dataStr = readline(obj.serialPort); %#ok<NASGU>
+            %             switch dataStr.strip
+            %                 case 'BurstStarting'
+            %                     fprintf('Burst Start\n');
+            %                     obj.evntTime = GetSecs;
+            %                 case {'BurstComplete','BurstAborted'}
+            %                     duration = GetSecs-obj.evntTime;
+            %                     fprintf('Burst Complete, duration = %1.3f sec\n',duration);
+            %                 otherwise
+            %                     fprintf('Serial Data Received:%s\n',dataStr);
+            %             end
         end
         
         function set.burstDuration(obj,value)
             obj.burstDuration = value;
-            obj.sendString(sprintf('%i:-1',value));
+            % obj.sendString(sprintf('%i:-1',value));
+            obj.sendString(sprintf('burstDuration:%i',value));
         end
         
         function set.pulseFreq(obj,value)
             obj.pulseFreq = value;
-            obj.sendString(sprintf('-1:%i',value));
+            % obj.sendString(sprintf('-1:%i',value));
+            obj.sendString(sprintf('pulseFreq:%1.2f',value));
         end
         
         function triggerPulse(obj)
@@ -148,23 +150,26 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
         end
         
         function sendString(obj,string)
-            % Make sure commands don't get sent too fast - this can cause
-            % problems with the code that parses command strings
-            currTime = GetSecs;
-            while (currTime-obj.lastWriteCmdTime<obj.minInterCmdTime)
-                currTime = GetSecs;
-            end
-            obj.lastWriteCmdTime = currTime;
-            % Create and fill buffer then send
-            nCh = length(string);
-            if nCh >= obj.BUFFERSIZE
-                error('String too long for serial buffer');
-            end
-            buff = blanks(obj.BUFFERSIZE);
-            buff(1:nCh) = string;
-            buff(nCh+1) = obj.NEWLINE;
+            buff = sprint('<%s>',string);
             obj.serialPort.write(buff,"char");
-            %fprintf('SendStr:<%s>\n',buff);
+            
+            %             % Make sure commands don't get sent too fast - this can cause
+            %             % problems with the code that parses command strings
+            %             currTime = GetSecs;
+            %             while (currTime-obj.lastWriteCmdTime<obj.minInterCmdTime)
+            %                 currTime = GetSecs;
+            %             end
+            %             obj.lastWriteCmdTime = currTime;
+            %             % Create and fill buffer then send
+            %             nCh = length(string);
+            %             if nCh >= obj.BUFFERSIZE
+            %                 error('String too long for serial buffer');
+            %             end
+            %             buff = blanks(obj.BUFFERSIZE);
+            %             buff(1:nCh) = string;
+            %             buff(nCh+1) = obj.NEWLINE;
+            %             obj.serialPort.write(buff,"char");
+            %             %fprintf('SendStr:<%s>\n',buff);
         end
         
         

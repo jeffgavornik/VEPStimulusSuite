@@ -5,6 +5,11 @@
     When inPin goes from low to high, start pulsing on outPin with a pulseHalfPeriod.
     Keep pulsing for burstDuration and abort if inPin goes low to high
 
+    Terminology - 
+      a pulse is a single on-off of light with a duration specified by pulseFreq
+      a burst is a bunch of pulses specified by a duration in ms
+      pwm can be used to modulate laser power delivered by each pulse
+
     Serial connection can be used to set burstDuration and pulseFreq
     String should look like this 'burstDuration:pulseFreq', where both are integers.  Values of 0 are ignored.
 
@@ -20,6 +25,7 @@
 
 */
 
+#include "serialCmdDefs.h"
 #include <LiquidCrystal_I2C.h>
 #include <Wire.h>
 
@@ -35,12 +41,14 @@ const int inPin = 8;
 const int outPin = 9;
 const int burstActivePin = LED_BUILTIN; // built in LED will show pulses
 
-unsigned long currTime, burstEndTime, laserToggleTime;
+unsigned long currTime, burstEndTime, pulseToggleTime; // for use with millis timer
 unsigned long burstDuration = 3000; // ms
 float pulseFreq = 30; // Hz
 unsigned long pulseHalfPeriod; // ms, one on-off cycle occurs every 2 pulseHalfPeriods
 int laserState = LOW;
 int pulseActive = LOW;
+int dutyCycle = 100;
+int pwmLevel = 255;
 
 bool abortFlag = false;
 bool serialTrigger = false;
@@ -51,9 +59,7 @@ const char startMarker = '<';
 const char endMarker = '>';
 char cmdBuffer[BUFFERSIZE];
 bool newCommandReceived = false;
-#define ABORTCMD "ABORT"
-#define TRIGGERCMD "TRIGGER"
-#define VALIDATECMD "VALIDATE"
+
 
 // Variables to set minimum interval before trigger pulses
 unsigned long readyForTriggerTime;
@@ -137,7 +143,7 @@ void loop() {
       if (startBurst) {
         programState = PULSING;
         burstEndTime = currTime + burstDuration;
-        laserToggleTime = currTime + pulseHalfPeriod;
+        pulseToggleTime = currTime + pulseHalfPeriod;
         laserState = HIGH;
         pulseActive = HIGH;
         Serial.println("BurstStarting");
@@ -150,14 +156,15 @@ void loop() {
         programState = WAITING;
         if (abortFlag) Serial.println("BurstAborted");
         else Serial.println("BurstComplete");
-      } else if (currTime >= laserToggleTime) {
+      } else if (currTime >= pulseToggleTime) {
         laserState = !laserState;
-        laserToggleTime = currTime + pulseHalfPeriod;
+        pulseToggleTime = currTime + pulseHalfPeriod;
       }
       break;
   }
-
-  digitalWrite(outPin, laserState);
+  
+  //digitalWrite(outPin, laserState);
+  analogWrite(outPin,laserState*pwmLevel);
   digitalWrite(burstActivePin, pulseActive);
   abortFlag = false;
   serialTrigger = false;
@@ -193,65 +200,44 @@ void executeCommand(String *commandStr) {
   else if (*commandStr == VALIDATECMD) Serial.println("VALID");
   else if (*commandStr == TRIGGERCMD) serialTrigger = true;
   else {
-    char *pVarName,*pVarValue;
-    int cmdBurst;
-    float cmdFreq;
+    char *pVarName, *pVarValue;
     bool needRefresh = false;
+    // Split command string at the :, 1st half is variable name 2nd half is value
     pVarName = strtok(commandStr->c_str(), ":");
     pVarValue = strtok(NULL, ":");
     String varName(pVarName);
-    if (varName == "burstDuration") {
-      int cmdBurst = atoi(pToken);
-      if (cmdBurst == 0 && burstDuration != MAXDURATION) {
+    if (varName == BURSTDURATIONVAR) {
+      int cmdBurstDuration = atoi(pVarValue);
+      if (cmdBurstDuration == 0 && burstDuration != MAXDURATION) {
         burstDuration = MAXDURATION;
         needRefresh = true;
       }
-      else if (cmdBurst != burstDuration) {
-        burstDuration = cmdDuration;
+      else if (cmdBurstDuration != burstDuration) {
+        burstDuration = cmdBurstDuration;
         needRefresh = true;
       }
-      else
-    } else if (varName == "pulseFreq") {
-      cmdFreq = atof(pToken);
-    } else {
-      // unknown command 
-    }
-  }
-}
-
-
-
-/*
-
-  if (Serial.available() >= BUFFERSIZE) {
-    String commandStr = Serial.readStringUntil(NEWLINE);
-    while (Serial.available()) Serial.read(); // flush buffer
-    // Look for ABORT or VALIDATE commands
-    if (commandStr == ABORTCMD) abortFlag = true;
-    else if (commandStr == VALIDATECMD) Serial.println("VALID");
-    else if (commandStr == TRIGGERCMD) serialTrigger = true;
-    else { // Assign variables based on string content
-      int intBurst, intFreq;
-      bool needRefresh = false;
-      sscanf(commandStr.c_str(), "%d:%d", &intBurst, &intFreq);
-      if ((intBurst > 0) && (burstDuration != intBurst)) {
-        burstDuration = intBurst;
+      String rtrnStr(BURSTDURATIONVAR);
+      rtrnStr += "=";
+      rtrnStr += String(burstDuration);
+      Serial.print(rtrnStr);
+    } else if (varName == PULSEFREQVAR) {
+      float cmdPulseFreq = atof(pVarValue);
+      if (cmdPulseFreq > 0 && pulseFreq != cmdPulseFreq) {
         needRefresh = true;
-      } else if ((intBurst == 0) && (burstDuration != MAXDURATION)) {
-        needRefresh = true;
-        burstDuration = MAXDURATION;
-      }
-      if ((intFreq > 0) && (pulseFreq != (float)intFreq)) {
-        needRefresh = true;
-        pulseFreq = (float)intFreq;
+        pulseFreq = cmdPulseFreq;
         pulseHalfPeriod = 500 / pulseFreq;
-      } else if ((intFreq == 0) && (pulseFreq != 0.0)) {
+      } else if (cmdPulseFreq == 0 && pulseFreq != 0.0) {
         needRefresh = true;
         pulseFreq = 0.0;
         pulseHalfPeriod = MAXDURATION;
       }
-      if (needRefresh) outputStateToLCD();
+      String rtrnStr(PULSEFREQVAR);
+      rtrnStr += "=";
+      rtrnStr += String(pulseFreq);
+      Serial.print(rtrnStr);
+    } else {
+      // unknown command
     }
+    if (needRefresh) outputStateToLCD();
   }
-  }
-*/
+}
