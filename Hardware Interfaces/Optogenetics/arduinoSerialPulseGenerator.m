@@ -3,6 +3,8 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
     
     % Use an Arduino Uno to control laser pulses and timing
     % Serial commands used to set firmware variables
+    %
+    % Should have some way to sync params with the arduino on connection
     
     properties (Constant,Hidden=true)
         prefFileNameStr = 'adruinoSerialPulseGenerator';
@@ -15,7 +17,10 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
     properties
         burstDuration
         pulseFreq
-        minInterCmdTime = 0.010;
+        % Arduino initilizes to use 100% duty cycle, set this param to
+        % change it
+        dutyCycle
+        showReceivedSerialData = false;
     end
     
     properties (SetObservable,AbortSet)
@@ -48,6 +53,10 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
                 obj.listenForPreferenceChanges;
                 obj.findArduino();
             end
+        end
+        
+        function delete(obj)
+            obj.closeConnection;
         end
         
         function success = openConnection(obj,reconnectFlag)
@@ -101,28 +110,37 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
         
         function respondToData(obj,varargin)
             dataStr = readline(obj.serialPort); %#ok<NASGU>
-            %             switch dataStr.strip
-            %                 case 'BurstStarting'
-            %                     fprintf('Burst Start\n');
-            %                     obj.evntTime = GetSecs;
-            %                 case {'BurstComplete','BurstAborted'}
-            %                     duration = GetSecs-obj.evntTime;
-            %                     fprintf('Burst Complete, duration = %1.3f sec\n',duration);
-            %                 otherwise
-            %                     fprintf('Serial Data Received:%s\n',dataStr);
-            %             end
+            if obj.showReceivedSerialData
+                switch dataStr.strip
+                    case 'BurstStarting'
+                        fprintf('Burst Start\n');
+                        obj.evntTime = GetSecs;
+                    case {'BurstComplete','BurstAborted'}
+                        duration = GetSecs-obj.evntTime;
+                        fprintf('Burst Complete, duration = %1.3f sec\n',duration);
+                    otherwise
+                        fprintf('Serial Data Received:%s\n',dataStr);
+                end
+            end
+            drawnow limitrate
         end
         
         function set.burstDuration(obj,value)
             obj.burstDuration = value;
-            % obj.sendString(sprintf('%i:-1',value));
             obj.sendString(sprintf('burstDuration:%i',value));
         end
         
         function set.pulseFreq(obj,value)
             obj.pulseFreq = value;
-            % obj.sendString(sprintf('-1:%i',value));
             obj.sendString(sprintf('pulseFreq:%1.2f',value));
+        end
+        
+        function set.dutyCycle(obj,value)
+            if value < 1
+                value = value * 100;
+            end
+            obj.dutyCycle = value;
+            obj.sendString(sprintf('dutyCycle:%.0f',value));
         end
         
         function triggerPulse(obj)
@@ -150,26 +168,8 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
         end
         
         function sendString(obj,string)
-            buff = sprint('<%s>',string);
+            buff = sprintf('<%s>',string);
             obj.serialPort.write(buff,"char");
-            
-            %             % Make sure commands don't get sent too fast - this can cause
-            %             % problems with the code that parses command strings
-            %             currTime = GetSecs;
-            %             while (currTime-obj.lastWriteCmdTime<obj.minInterCmdTime)
-            %                 currTime = GetSecs;
-            %             end
-            %             obj.lastWriteCmdTime = currTime;
-            %             % Create and fill buffer then send
-            %             nCh = length(string);
-            %             if nCh >= obj.BUFFERSIZE
-            %                 error('String too long for serial buffer');
-            %             end
-            %             buff = blanks(obj.BUFFERSIZE);
-            %             buff(1:nCh) = string;
-            %             buff(nCh+1) = obj.NEWLINE;
-            %             obj.serialPort.write(buff,"char");
-            %             %fprintf('SendStr:<%s>\n',buff);
         end
         
         

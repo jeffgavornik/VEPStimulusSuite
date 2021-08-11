@@ -9,3 +9,4 @@
 #define VALIDATECMD "VALIDATE"
 #define BURSTDURATIONVAR "burstDuration"
 #define PULSEFREQVAR "pulseFreq"
+#define DUTYCYCLEVAR "dutyCycle"

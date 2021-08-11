@@ -5,7 +5,7 @@
     When inPin goes from low to high, start pulsing on outPin with a pulseHalfPeriod.
     Keep pulsing for burstDuration and abort if inPin goes low to high
 
-    Terminology - 
+    Terminology -
       a pulse is a single on-off of light with a duration specified by pulseFreq
       a burst is a bunch of pulses specified by a duration in ms
       pwm can be used to modulate laser power delivered by each pulse
@@ -34,7 +34,7 @@
 #define BUFFERSIZE 52 // all commands will be this many bytes
 #define BAUDRATE 115200 // must match matlab value
 
-#define MAXDURATION 4294967290 // for unsigned long
+#define MAXDURATION 3600000 // one hour 4294967290 // for unsigned long
 
 // Hardware Assignments
 const int inPin = 8;
@@ -162,9 +162,9 @@ void loop() {
       }
       break;
   }
-  
+
   //digitalWrite(outPin, laserState);
-  analogWrite(outPin,laserState*pwmLevel);
+  analogWrite(outPin, laserState * pwmLevel);
   digitalWrite(burstActivePin, pulseActive);
   abortFlag = false;
   serialTrigger = false;
@@ -184,26 +184,35 @@ void processSerialCommands() {
       if (rcvByte != endMarker) {
         cmdBuffer[iCmdBuff++] = rcvByte;
       } else {
-        cmdBuffer[iCmdBuff] == '\0';
+        //cmdBuffer[iCmdBuff] == '\n';
         recvInProgress = false;
-        iCmdBuff = 0;
+        //Serial.println(cmdBuffer);
         String commandStr(cmdBuffer);
-        executeCommand(&commandStr);
+        for (int ii = 0; ii <= iCmdBuff; ii++) cmdBuffer[ii] = 0;
+        iCmdBuff = 0;
+        if (!executeCommand(&commandStr)) {
+          String rtrnStr("Unknown Command <");
+          rtrnStr += commandStr + ">\n";
+          Serial.print(rtrnStr);
+        }
       }
     }
   }
 }
 
-void executeCommand(String *commandStr) {
+bool executeCommand(String *commandStr) {
   // Interpret and execute complete commands
+  bool success = true; // set false for unrecognized commands
   if (*commandStr == ABORTCMD) abortFlag = true;
   else if (*commandStr == VALIDATECMD) Serial.println("VALID");
   else if (*commandStr == TRIGGERCMD) serialTrigger = true;
   else {
     char *pVarName, *pVarValue;
     bool needRefresh = false;
+    char cmdBuffer[commandStr->length()+1];
+    commandStr->toCharArray(cmdBuffer,commandStr->length()+1);
     // Split command string at the :, 1st half is variable name 2nd half is value
-    pVarName = strtok(commandStr->c_str(), ":");
+    pVarName = strtok(cmdBuffer, ":");
     pVarValue = strtok(NULL, ":");
     String varName(pVarName);
     if (varName == BURSTDURATIONVAR) {
@@ -211,33 +220,41 @@ void executeCommand(String *commandStr) {
       if (cmdBurstDuration == 0 && burstDuration != MAXDURATION) {
         burstDuration = MAXDURATION;
         needRefresh = true;
-      }
-      else if (cmdBurstDuration != burstDuration) {
+        burstEndTime = millis(); // end current pulse if in-progress
+      } else if (cmdBurstDuration != burstDuration) {
         burstDuration = cmdBurstDuration;
         needRefresh = true;
+        burstEndTime = millis(); // end current pulse if in-progress
       }
       String rtrnStr(BURSTDURATIONVAR);
-      rtrnStr += "=";
-      rtrnStr += String(burstDuration);
-      Serial.print(rtrnStr);
+      rtrnStr += "=" + String(burstDuration);
+      Serial.println(rtrnStr);
     } else if (varName == PULSEFREQVAR) {
       float cmdPulseFreq = atof(pVarValue);
       if (cmdPulseFreq > 0 && pulseFreq != cmdPulseFreq) {
         needRefresh = true;
         pulseFreq = cmdPulseFreq;
         pulseHalfPeriod = 500 / pulseFreq;
+        pulseToggleTime = millis();
       } else if (cmdPulseFreq == 0 && pulseFreq != 0.0) {
         needRefresh = true;
         pulseFreq = 0.0;
         pulseHalfPeriod = MAXDURATION;
+        pulseToggleTime = millis();
       }
       String rtrnStr(PULSEFREQVAR);
-      rtrnStr += "=";
-      rtrnStr += String(pulseFreq);
-      Serial.print(rtrnStr);
+      rtrnStr += "=" + String(pulseFreq);
+      Serial.println(rtrnStr);
+    } else if (varName == DUTYCYCLEVAR) {
+      dutyCycle = constrain(atoi(pVarValue), 0, 100);
+      pwmLevel = 255 * dutyCycle / 100;
+      String rtrnStr(DUTYCYCLEVAR);
+      rtrnStr += "=" + String(dutyCycle) + ":pwmLevel=" + String(pwmLevel);
+      Serial.println(rtrnStr);
     } else {
-      // unknown command
+      success = false;
     }
     if (needRefresh) outputStateToLCD();
   }
+  return success;
 }
