@@ -1,3 +1,4 @@
+
 classdef sequenceElementClass < handle
     
     properties

@@ -28,10 +28,6 @@
 #define BUFFERSIZE 52 // all commands will be this many bytes
 #define BAUDRATE 115200 // must match matlab value
 
-#define ABORTCMD "ABORT"
-#define TRIGGERCMD "TRIGGER"
-#define VALIDATECMD "VALIDATE"
-
 #define MAXDURATION 4294967290 // for unsigned long
 
 // Hardware Assignments
@@ -49,6 +45,15 @@ int pulseActive = LOW;
 bool abortFlag = false;
 bool serialTrigger = false;
 bool startBurst = false;
+
+// Variables used to process serial commands
+const char startMarker = '<';
+const char endMarker = '>';
+char cmdBuffer[BUFFERSIZE];
+bool newCommandReceived = false;
+#define ABORTCMD "ABORT"
+#define TRIGGERCMD "TRIGGER"
+#define VALIDATECMD "VALIDATE"
 
 // Variables to set minimum interval before trigger pulses
 unsigned long readyForTriggerTime;
@@ -154,10 +159,70 @@ void loop() {
 
   digitalWrite(outPin, laserState);
   digitalWrite(burstActivePin, pulseActive);
-
-  // Process any command received over the serial interface
   abortFlag = false;
   serialTrigger = false;
+  processSerialCommands();
+}
+
+void processSerialCommands() {
+  // Fill buffer with serial data until a complete command, delimited by <>, is received
+  static bool recvInProgress = false;
+  static byte iCmdBuff = 0;
+  char rcvByte;
+  while (Serial.available() > 0) {
+    rcvByte = Serial.read();
+    if (rcvByte == startMarker) {
+      recvInProgress = true;
+    } else if (recvInProgress) {
+      if (rcvByte != endMarker) {
+        cmdBuffer[iCmdBuff++] = rcvByte;
+      } else {
+        cmdBuffer[iCmdBuff] == '\0';
+        recvInProgress = false;
+        iCmdBuff = 0;
+        String commandStr(cmdBuffer);
+        executeCommand(&commandStr);
+      }
+    }
+  }
+}
+
+void executeCommand(String *commandStr) {
+  // Interpret and execute complete commands
+  if (*commandStr == ABORTCMD) abortFlag = true;
+  else if (*commandStr == VALIDATECMD) Serial.println("VALID");
+  else if (*commandStr == TRIGGERCMD) serialTrigger = true;
+  else {
+    char *pVarName,*pVarValue;
+    int cmdBurst;
+    float cmdFreq;
+    bool needRefresh = false;
+    pVarName = strtok(commandStr->c_str(), ":");
+    pVarValue = strtok(NULL, ":");
+    String varName(pVarName);
+    if (varName == "burstDuration") {
+      int cmdBurst = atoi(pToken);
+      if (cmdBurst == 0 && burstDuration != MAXDURATION) {
+        burstDuration = MAXDURATION;
+        needRefresh = true;
+      }
+      else if (cmdBurst != burstDuration) {
+        burstDuration = cmdDuration;
+        needRefresh = true;
+      }
+      else
+    } else if (varName == "pulseFreq") {
+      cmdFreq = atof(pToken);
+    } else {
+      // unknown command 
+    }
+  }
+}
+
+
+
+/*
+
   if (Serial.available() >= BUFFERSIZE) {
     String commandStr = Serial.readStringUntil(NEWLINE);
     while (Serial.available()) Serial.read(); // flush buffer
@@ -188,4 +253,5 @@ void loop() {
       if (needRefresh) outputStateToLCD();
     }
   }
-}
+  }
+*/
