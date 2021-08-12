@@ -5,6 +5,10 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
     % Serial commands used to set firmware variables
     %
     % Should have some way to sync params with the arduino on connection
+    %
+    % note: testSerialLatency shows that a single command sent via the
+    % serial interface has a latency of about 0.76 ms on standard linux
+    % build
     
     properties (Constant,Hidden=true)
         prefFileNameStr = 'adruinoSerialPulseGenerator';
@@ -21,6 +25,7 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
         % change it
         dutyCycle
         showReceivedSerialData = false;
+        dataRecvdCallbackEnabled
     end
     
     properties (SetObservable,AbortSet)
@@ -72,13 +77,26 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
                     delete(obj.serialPort);
                 end
                 obj.serialPort = serialport(obj.SerialPortNameStr,obj.BAUDRATE);
-                %configureCallback(obj.serialPort,"byte",52,@(src,evnt)respondToData(obj));
-                configureCallback(obj.serialPort,...
-                    "terminator",@(src,evnt)respondToData(obj));
+                obj.setDataCallback('on');
                 success = true;
             catch ME
                 handleError(ME,true,'Arduino Connection Error');
                 success = false;
+            end
+        end
+        
+        function setDataCallback(obj,onOrOff)
+            switch onOrOff
+                case 'on'
+                    %configureCallback(obj.serialPort,"byte",52,@(src,evnt)respondToData(obj));
+                    configureCallback(obj.serialPort,"terminator",...
+                        @(src,evnt)respondToData(obj));
+                    obj.dataRecvdCallbackEnabled = true;
+                case 'off'
+                    configureCallback(obj.serialPort,"off");
+                    obj.dataRecvdCallbackEnabled = false;
+                otherwise
+                    error('onOrOff must be either on or off');
             end
         end
         
@@ -88,19 +106,18 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
                 return;
             end
             try
-                configureCallback(obj.serialPort,"off");
+                obj.setDataCallback('off');
                 obj.sendString(obj.validateCmd);
                 response = char(readline(obj.serialPort));
                 isValid = strcmp(response(1:end-1),'VALID');
-                configureCallback(obj.serialPort,"terminator",...
-                    @(src,evnt)respondToData(obj));
                 if ~isValid
-                    fprintf('Failed validation String:%s\n',...
-                        response(1:end-1));
+                    fprintf(2,'%s.validateInterface: Failed validation String:%s\n',...
+                        class(obj),response(1:end-1));
                 end
             catch ME
                 handleError(ME,true,'Validation Error');
             end
+            obj.setDataCallback('on');
         end
         
         function closeConnection(obj)
@@ -109,7 +126,7 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
         end
         
         function respondToData(obj,varargin)
-            dataStr = readline(obj.serialPort); %#ok<NASGU>
+            dataStr = readline(obj.serialPort);
             if obj.showReceivedSerialData
                 switch dataStr.strip
                     case 'BurstStarting'
@@ -121,8 +138,8 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
                     otherwise
                         fprintf('Serial Data Received:%s\n',dataStr);
                 end
+                drawnow limitrate
             end
-            drawnow limitrate
         end
         
         function set.burstDuration(obj,value)
