@@ -26,6 +26,7 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
         dutyCycle
         showReceivedSerialData = false;
         dataRecvdCallbackEnabled
+        burstActive
     end
     
     properties (SetObservable,AbortSet)
@@ -127,18 +128,27 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
         
         function respondToData(obj,varargin)
             dataStr = readline(obj.serialPort);
+            switch dataStr.strip
+                case 'BurstStarting'
+                    obj.burstActive = true;
+                case {'BurstComplete','BurstAborted'}
+                    obj.burstActive = false;
+            end
             if obj.showReceivedSerialData
                 switch dataStr.strip
                     case 'BurstStarting'
                         fprintf('Burst Start\n');
                         obj.evntTime = GetSecs;
-                    case {'BurstComplete','BurstAborted'}
+                    case 'BurstComplete'
                         duration = GetSecs-obj.evntTime;
                         fprintf('Burst Complete, duration = %1.3f sec\n',duration);
+                    case 'BurstAborted'
+                        duration = GetSecs-obj.evntTime;
+                        fprintf('Burst Aborted, duration = %1.3f sec\n',duration);
                     otherwise
                         fprintf('Serial Data Received:%s\n',dataStr);
                 end
-                drawnow limitrate
+                drawnow
             end
         end
         
