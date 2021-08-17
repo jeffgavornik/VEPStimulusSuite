@@ -19,11 +19,11 @@ classdef arduinoSerialPulseGenerator < singletonClass ...
     end
     
     properties
-        burstDuration
-        pulseFreq
+        burstDuration = 500;
+        pulseFreq = 30;
         % Arduino initilizes to use 100% duty cycle, set this param to
         % change it
-        dutyCycle
+        dutyCycle = 100;
         showReceivedSerialData = false;
         dataRecvdCallbackEnabled
         burstActive
