@@ -29,7 +29,11 @@ classdef sessionManagerClass < handle
         % See ttlInterfaceClass.sendStringAsEvent and
         % stimulusSequenceClass.tellSequenceDetails for more information
         sendStimDetailsToTTL
-                
+
+        % Pulse zero for specified amount of time before and after the experiment begins
+        preExpGrayTime = 0;
+        postExpGrayTime = 0;
+
     end
     
     properties (Access=protected)
@@ -162,7 +166,8 @@ classdef sessionManagerClass < handle
             reqTime = reqTime - obj.interSeqInterval; % time for 1 session
             reqTime = reqTime * obj.nSessions; % time for all sessions
             % Add in the intersession intervals
-            reqTime = reqTime + obj.interSessInterval*(obj.nSessions-1);            
+            reqTime = reqTime + obj.interSessInterval*(obj.nSessions-1);
+            reqTime = reqTime + obj.preExpGrayTime + obj.postExpGrayTime;
         end
         
         function startPresentation(obj)
@@ -202,11 +207,22 @@ classdef sessionManagerClass < handle
             % Grab the dispatchEngine
             siezeEngine(obj.dispatchEngine);
             
-            % Start presentation cycle
+            % If preExpGrayTime is specified, start timer to pulse zero.
+            % Otherwise, start the presentation cycle
             obj.seqCount = 1;
             obj.sessCount = 1;
             startRecording(obj.ttlInterface);
-            startSequence(obj);
+
+            if obj.preExpGrayTime > 0
+                obj.seqStartTimer = timer('Name','seqStartTimer',...
+                    'StartDelay',round(obj.preExpGrayTime),...
+                    'TimerFcn',@(src,event)startSequence(obj,src));
+                start(obj.seqStartTimer);
+                % Use the same method that handles interSequence periods
+                setupInterSequenceActivity(obj,obj.preExpGrayTime);
+            else
+                startSequence(obj);
+            end
             
         end
         
@@ -360,7 +376,18 @@ classdef sessionManagerClass < handle
                         %fprintf('lastSeq&lastSess\n');
                         % If this was the last sequence of the last session
                         % presentation is complete
-                        stopPresentation(obj,'Normal');
+                        if obj.postExpGrayTime > 0
+                            obj.seqStartTimer = timer('Name','seqStartTimer',...
+                                'StartDelay',round(obj.postExpGrayTime),...
+                                'TimerFcn',@(src,event)stopPresentation(obj,'Normal',src));
+                            start(obj.seqStartTimer);
+                            % Use the same method that handles interSequence periods
+                            setupInterSequenceActivity(obj,obj.postExpGrayTime);
+                        else
+                            stopPresentation(obj,'Normal');
+                        end
+
+                        
                         return;
                     elseif lastSeq
                         %fprintf('lastSeq\n');
@@ -436,7 +463,10 @@ classdef sessionManagerClass < handle
             stopPresentation(obj,'Abort');
         end
         
-        function stopPresentation(obj,stopType)
+        function stopPresentation(obj,stopType,src)
+            if nargin > 2
+                stop(src);
+            end
             % fprintf('%s.stopPresentation(%s)\n',class(obj),stopType);
             deleteTimers([obj.seqStartTimer obj.interStimTimer]);
             delete(obj.sequenceCompletionListener);
